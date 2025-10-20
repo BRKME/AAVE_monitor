@@ -175,7 +175,7 @@ def monitor_aave_positions():
             MAX_UINT256 = 2**256 - 1
             if health_factor_raw == MAX_UINT256:
                 hf_display = '∞'
-                status = '🟢 Безопасно (нет долга)'
+                status = '🟢 нет долга'
             else:
                 hf_display = "{0:.2f}".format(health_factor)
                 if health_factor > 1.45:
@@ -184,7 +184,7 @@ def monitor_aave_positions():
                     emoji = '🔴'
                 base_status = 'РИСК ЛИКВИДАЦИИ!' if health_factor < 1 else 'Безопасно'
                 status = f"{emoji} {base_status}"
-                if health_factor < 1.2:
+                if health_factor < 1.4:
                     low_hf_warning = True
             
             console_section = f"\n--- {console_name} ({addr.upper()}) ---\n"
