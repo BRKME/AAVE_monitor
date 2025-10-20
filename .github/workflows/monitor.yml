@@ -1,0 +1,25 @@
+name: AAVE Monitor Cron
+
+on:
+  schedule:
+    - cron: '0 4,16 * * *'  # 7:00 и 19:00 MSK (UTC+3)
+  workflow_dispatch:  # Ручной запуск
+
+jobs:
+  monitor:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+      - name: Run monitor
+        env:
+          BOT_TOKEN: 8442392037:AAEiM_b4QfdFLqbmmc1PXNvA99yxmFVLEp8
+          CHAT_ID: 350766421
+        run: python aave_monitor.py
