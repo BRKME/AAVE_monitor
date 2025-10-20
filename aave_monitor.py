@@ -31,22 +31,147 @@ CHAT_ID = os.environ.get('CHAT_ID', '350766421')
 POOL_ADDRESS = '0x794a61358D6845594F94dc1DB02A252b5b4814aD'
 RPC_URL = 'https://arb1.arbitrum.io/rpc'
 
-# ABI_POOL и ABI_ERC20 (как раньше, без изменений)
+# Полный ABI_POOL
 ABI_POOL = [
-    # ... (вставь полный ABI_POOL из предыдущего кода, чтобы не повторять)
+    {
+        "inputs": [{"internalType": "address", "name": "user", "type": "address"}],
+        "name": "getUserAccountData",
+        "outputs": [
+            {"internalType": "uint256", "name": "totalCollateralBase", "type": "uint256"},
+            {"internalType": "uint256", "name": "totalDebtBase", "type": "uint256"},
+            {"internalType": "uint256", "name": "availableBorrowsBase", "type": "uint256"},
+            {"internalType": "uint256", "name": "currentLiquidationThreshold", "type": "uint256"},
+            {"internalType": "uint256", "name": "ltv", "type": "uint256"},
+            {"internalType": "uint256", "name": "healthFactor", "type": "uint256"}
+        ],
+        "stateMutability": "view",
+        "type": "function"
+    },
+    {
+        "inputs": [],
+        "name": "getReservesList",
+        "outputs": [{"internalType": "address[]", "name": "", "type": "address[]"}],
+        "stateMutability": "view",
+        "type": "function"
+    },
+    {
+        "inputs": [{"internalType": "address", "name": "user", "type": "address"}],
+        "name": "getUserConfigurationData",
+        "outputs": [
+            {"internalType": "DataTypes.UserConfigurationMap", "name": "", "type": "tuple"}
+        ],
+        "stateMutability": "view",
+        "type": "function"
+    },
+    {
+        "inputs": [
+            {"internalType": "address", "name": "asset", "type": "address"},
+            {"internalType": "address", "name": "user", "type": "address"}
+        ],
+        "name": "getUserReserveData",
+        "outputs": [
+            {"internalType": "uint256", "name": "currentATokenBalance", "type": "uint256"},
+            {"internalType": "uint256", "name": "currentStableDebt", "type": "uint256"},
+            {"internalType": "uint256", "name": "currentVariableDebt", "type": "uint256"},
+            {"internalType": "uint256", "name": "principalStableDebt", "type": "uint256"},
+            {"internalType": "uint256", "name": "scaledVariableDebt", "type": "uint256"},
+            {"internalType": "uint256", "name": "stableBorrowRate", "type": "uint256"},
+            {"internalType": "uint256", "name": "liquidityRate", "type": "uint256"},
+            {"internalType": "uint40", "name": "stableRateLastUpdated", "type": "uint40"},
+            {"internalType": "bool", "name": "usageAsCollateralEnabled", "type": "bool"}
+        ],
+        "stateMutability": "view",
+        "type": "function"
+    }
 ]
 
+# ABI для ERC20
 ABI_ERC20 = [
     {"inputs": [], "name": "symbol", "outputs": [{"internalType": "string", "name": "", "type": "string"}], "stateMutability": "view", "type": "function"},
     {"inputs": [], "name": "decimals", "outputs": [{"internalType": "uint8", "name": "", "type": "uint8"}], "stateMutability": "view", "type": "function"}
 ]
 
-# Функции get_eth_price, get_token_price, send_telegram_message, get_token_details (как раньше)
+def get_eth_price():
+    """Цена ETH в USD"""
+    try:
+        response = requests.get('https://api.coingecko.com/api/v3/simple/price?ids=ethereum&vs_currencies=usd', timeout=10)
+        response.raise_for_status()
+        return response.json()['ethereum']['usd']
+    except Exception as e:
+        print(f"Ошибка цены ETH: {e}")
+        return None
+
+def get_token_price(symbol):
+    """Цена токена в USD"""
+    if not symbol or symbol == 'ETH':
+        return get_eth_price()
+    try:
+        response = requests.get(f'https://api.coingecko.com/api/v3/simple/price?ids={symbol.lower()}&vs_currencies=usd', timeout=10)
+        response.raise_for_status()
+        data = response.json()
+        return list(data.values())[0]['usd'] if data else None
+    except Exception as e:
+        print(f"Ошибка цены {symbol}: {e}")
+        return None
+
+def send_telegram_message(message):
+    """Отправка в TG"""
+    url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
+    payload = {"chat_id": CHAT_ID, "text": message, "parse_mode": "HTML"}
+    try:
+        requests.post(url, json=payload, timeout=10)
+        print("TG-отчёт отправлен.")
+    except Exception as e:
+        print(f"TG ошибка: {e}")
+
+def get_token_details(w3, reserve_address):
+    """Детали токена: symbol, decimals"""
+    try:
+        erc20 = w3.eth.contract(address=Web3.to_checksum_address(reserve_address), abi=ABI_ERC20)
+        symbol = erc20.functions.symbol().call()
+        decimals = erc20.functions.decimals().call()
+        return symbol, decimals
+    except Exception as e:
+        print(f"Ошибка деталей токена: {e}")
+        return 'UNKNOWN', 18
 
 def monitor_aave_positions():
-    # ... (основная логика как раньше, с изменениями в status)
-
-            # HF обработка с эмодзи
+    """Основной мониторинг"""
+    print("Запуск мониторинга...")  # Debug для Actions
+    w3 = Web3(Web3.HTTPProvider(RPC_URL))
+    if not w3.is_connected():
+        print("Ошибка RPC.")
+        return None
+    
+    pool = w3.eth.contract(address=Web3.to_checksum_address(POOL_ADDRESS), abi=ABI_POOL)
+    reserves_list = pool.functions.getReservesList().call()
+    
+    eth_price = get_eth_price()
+    timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    price_str = " (ETH: ${0:.2f})".format(eth_price) if eth_price else ""
+    
+    report = f"<b>AAVE Arbitrum Мониторинг {timestamp}{price_str}</b>\n\n"
+    console_report = f"\n=== Мониторинг AAVE Arbitrum на {timestamp}{price_str} ===\n"
+    
+    low_hf_warning = False
+    
+    for addr in ADDRESSES:
+        short_name = SHORT_NAMES.get(addr.lower(), addr[:8] + '...')
+        console_name = short_name
+        tg_name = short_name
+        
+        try:
+            # Общие метрики (всегда работают)
+            result = pool.functions.getUserAccountData(Web3.to_checksum_address(addr)).call()
+            total_collateral_base = result[0] / 1e8
+            total_debt_base = result[1] / 1e8
+            available_borrows_base = result[2] / 1e8
+            liq_threshold = result[3] / 1e4
+            ltv = result[4] / 1e4
+            health_factor_raw = result[5]
+            health_factor = health_factor_raw / 1e18  # Здесь рассчитываем, перед использованием!
+            
+            # HF обработка с эмодзи (после расчёта!)
             MAX_UINT256 = 2**256 - 1
             if health_factor_raw == MAX_UINT256:
                 hf_display = '∞'
@@ -61,11 +186,88 @@ def monitor_aave_positions():
                 status = f"{emoji} {base_status}"
                 if health_factor < 1.2:
                     low_hf_warning = True
+            
+            console_section = f"\n--- {console_name} ({addr.upper()}) ---\n"
+            console_section += f"Health Factor: {hf_display} ({status})\n"
+            console_section += f"Коллатерал: ${total_collateral_base:,.2f} USD\n"
+            console_section += f"Долг: ${total_debt_base:,.2f} USD\n"
+            console_section += f"LTV: {ltv:.1%} | Liquidation Threshold: {liq_threshold:.1%}\n"
+            
+            tg_section = f"<b>{tg_name}</b> ({addr.upper()})\n"
+            tg_section += f"HF: <code>{hf_display}</code> ({status})\n"
+            tg_section += f"Коллатерал: <code>${total_collateral_base:,.2f}</code>\n"
+            tg_section += f"Долг: <code>${total_debt_base:,.2f}</code>\n"
+            tg_section += f"LTV: {ltv:.1%} | LT: {liq_threshold:.1%}\n"
+            
+            # Детали токенов: только если есть активность
+            active_reserves = []
+            details_console = ""
+            details_tg = ""
+            if total_collateral_base > 0 or total_debt_base > 0:
+                try:
+                    user_config = pool.functions.getUserConfigurationData(Web3.to_checksum_address(addr)).call()
+                    config_map = user_config[0]  # uint256 bitmask
+                    
+                    for i, reserve_addr in enumerate(reserves_list):
+                        if (config_map & (1 << i)) != 0:  # Активен
+                            try:
+                                user_reserve = pool.functions.getUserReserveData(reserve_addr, Web3.to_checksum_address(addr)).call()
+                                a_balance = user_reserve[0]
+                                stable_debt = user_reserve[1]
+                                variable_debt = user_reserve[2]
+                                if a_balance > 0 or stable_debt > 0 or variable_debt > 0:
+                                    symbol, decimals = get_token_details(w3, reserve_addr)
+                                    price = get_token_price(symbol)
+                                    bal = a_balance / (10 ** decimals)
+                                    debt = (stable_debt + variable_debt) / (10 ** decimals)
+                                    a_usd = bal * price if price else 0
+                                    d_usd = debt * price if price else 0
+                                    active_reserves.append((symbol, bal, debt, a_usd, d_usd))
+                            except Exception:
+                                pass  # Skip bad reserve
+                except Exception as config_e:
+                    details_console = f"Нет деталей (пользователь не инициализирован: {config_e})\n"
+                    details_tg = "Нет деталей (не инициализирован)\n"
+                
+                # Сортировка и вывод топ-5
+                if active_reserves:
+                    active_reserves.sort(key=lambda x: x[3], reverse=True)
+                    details_console = "Детали активов:\n"
+                    details_tg = "Активы:\n"
+                    for sym, bal, debt, a_usd, d_usd in active_reserves[:5]:
+                        details_console += f"  - {sym}: Баланс {bal:.2f} (${a_usd:.2f}), Долг {debt:.2f} (${d_usd:.2f})\n"
+                        details_tg += f"• <code>{sym}</code>: {bal:.2f} (${a_usd:.2f}) | Долг: {debt:.2f} (${d_usd:.2f})\n"
+                else:
+                    details_console = "Нет активных токенов.\n"
+                    details_tg = "Нет активных токенов.\n"
+            else:
+                details_console = "Нет активных токенов (пустая позиция).\n"
+                details_tg = "Нет активных токенов (пустая позиция).\n"
+            
+            console_section += details_console
+            tg_section += details_tg
+            
+            console_report += console_section
+            report += tg_section + "\n"
+            
+        except Exception as e:
+            error_msg = "Общая ошибка: {0}".format(e)
+            console_report += f"\n--- {console_name} ---\n{error_msg}\n"
+            report += f"<b>{tg_name}</b>: {error_msg}\n\n"
+    
+    console_report += "\n" + "="*50 + "\n"
+    report += "=" * 50
+    
+    print(console_report)
+    
+    # TG отправка
+    if low_hf_warning:
+        report = "🚨 <b>ВНИМАНИЕ: Низкий HF у некоторых позиций!</b>\n\n" + report
+    send_telegram_message(report)
+    
+    return console_report
 
-            # В print и tg_section: используй status как есть
-
-# ... (остальной код как в предыдущей версии)
-
+# Запуск
 if __name__ == "__main__":
     try:
         monitor_aave_positions()
