@@ -9,16 +9,16 @@ import sys
 ADDRESSES = [
     '0x17e6D71D30d260e30BB7721C63539694aB02b036',
     '0x91dad140AF2800B2D660e530B9F42500Eee474a0',
-    '0x4e7240952C21C811d9e1237a328b927685A21418',
+    '0x4e7240952C21C811d9e1237a328b927685a21418',
     '0x3c2c34B9bB0b00145142FFeE68475E1AC01C92bA',
     '0x5A51f62D86F5CCB8C7470Cea2AC982762049c53c'
 ]
 
 # Short names для вывода
 SHORT_NAMES = {
-    '0x17e6d71d30d260e30bb7721c63539694ab02b036': 'Papa Dont drink alcohol today',
+    '0x17e6d71d30d260e30bb7721c63539694ab02b036': '1F_MMW',
     '0x91dad140af2800b2d660e530b9f42500eee474a0': '2F_MMS',
-    '0x4e7240952c21c811d9e1237a328b927685a21418': '3F_NH',
+    '0x4e7240952c21c811d9e1237a328b927685a21418': '3F_BNB',
     '0x3c2c34b9bb0b00145142ffee68475e1ac01c92ba': '4F_Exodus',
     '0x5a51f62d86f5ccb8c7470cea2ac982762049c53c': '5F_BNB'
 }
@@ -150,8 +150,8 @@ def monitor_aave_positions():
     timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
     price_str = " (ETH: ${0:.2f})".format(eth_price) if eth_price else ""
     
-    report = f"<b>AAVE Arbitrum Мониторинг {timestamp}{price_str}</b>\n\n"
-    console_report = f"\n=== Мониторинг AAVE Arbitrum на {timestamp}{price_str} ===\n"
+    report = f"<b>AAVE Мониторинг {timestamp}{price_str}</b>\n\n"
+    console_report = f"\n=== AAVE Мониторинг {timestamp}{price_str} ===\n"
     
     low_hf_warning = False
     
@@ -175,7 +175,8 @@ def monitor_aave_positions():
             MAX_UINT256 = 2**256 - 1
             if health_factor_raw == MAX_UINT256:
                 hf_display = '∞'
-                status = '🟢 нет долга'
+                emoji = '🟢'
+                base_status = 'нет долга'
             else:
                 hf_display = "{0:.2f}".format(health_factor)
                 if health_factor > 1.45:
@@ -183,21 +184,18 @@ def monitor_aave_positions():
                 else:
                     emoji = '🔴'
                 base_status = 'РИСК ЛИКВИДАЦИИ!' if health_factor < 1 else 'Безопасно'
-                status = f"{emoji} {base_status}"
                 if health_factor < 1.4:
                     low_hf_warning = True
             
-            console_section = f"\n--- {console_name} ({addr.upper()}) ---\n"
-            console_section += f"Health Factor: {hf_display} ({status})\n"
+            console_section = f"\n--- {console_name} ---\n"
+            console_section += f"{emoji}Health Factor: {hf_display} ({base_status})\n"
             console_section += f"Коллатерал: ${total_collateral_base:,.2f} USD\n"
             console_section += f"Долг: ${total_debt_base:,.2f} USD\n"
-            console_section += f"LTV: {ltv:.1%} | Liquidation Threshold: {liq_threshold:.1%}\n"
             
-            tg_section = f"<b>{tg_name}</b> ({addr.upper()})\n"
-            tg_section += f"HF: <code>{hf_display}</code> ({status})\n"
+            tg_section = f"<b>{tg_name}</b>\n"
+            tg_section += f"{emoji}HF: <code>{hf_display}</code> ({base_status})\n"
             tg_section += f"Коллатерал: <code>${total_collateral_base:,.2f}</code>\n"
             tg_section += f"Долг: <code>${total_debt_base:,.2f}</code>\n"
-            tg_section += f"LTV: {ltv:.1%} | LT: {liq_threshold:.1%}\n"
             
             # Детали токенов: только если есть активность
             active_reserves = []
@@ -226,8 +224,8 @@ def monitor_aave_positions():
                             except Exception:
                                 pass  # Skip bad reserve
                 except Exception as config_e:
-                    details_console = f"Нет деталей (пользователь не инициализирован: {config_e})\n"
-                    details_tg = "Нет деталей (не инициализирован)\n"
+                    # Убрали вывод "Нет деталей" — просто пропускаем без добавления секции
+                    pass
                 
                 # Сортировка и вывод топ-5
                 if active_reserves:
@@ -237,15 +235,13 @@ def monitor_aave_positions():
                     for sym, bal, debt, a_usd, d_usd in active_reserves[:5]:
                         details_console += f"  - {sym}: Баланс {bal:.2f} (${a_usd:.2f}), Долг {debt:.2f} (${d_usd:.2f})\n"
                         details_tg += f"• <code>{sym}</code>: {bal:.2f} (${a_usd:.2f}) | Долг: {debt:.2f} (${d_usd:.2f})\n"
-                else:
-                    details_console = "Нет активных токенов.\n"
-                    details_tg = "Нет активных токенов.\n"
-            else:
-                details_console = "Нет активных токенов (пустая позиция).\n"
-                details_tg = "Нет активных токенов (пустая позиция).\n"
+                # Если нет активных — просто не добавляем секцию (убрали "Нет активных токенов")
+            # Если позиция пустая — тоже не добавляем секцию
             
-            console_section += details_console
-            tg_section += details_tg
+            # Добавляем детали только если они есть
+            if details_console or details_tg:
+                console_section += details_console
+                tg_section += details_tg
             
             console_report += console_section
             report += tg_section + "\n"
