@@ -147,11 +147,24 @@ def monitor_aave_positions():
     reserves_list = pool.functions.getReservesList().call()
     
     eth_price = get_eth_price()
-    timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-    price_str = " (ETH: ${0:.2f})".format(eth_price) if eth_price else ""
     
-    report = f"<b>AAVE Мониторинг {timestamp}{price_str}</b>\n\n"
-    console_report = f"\n=== AAVE Мониторинг {timestamp}{price_str} ===\n"
+    # Новый заголовок
+    days_ru = {
+        'Monday': 'понедельник',
+        'Tuesday': 'вторник',
+        'Wednesday': 'среда',
+        'Thursday': 'четверг',
+        'Friday': 'пятница',
+        'Saturday': 'суббота',
+        'Sunday': 'воскресенье'
+    }
+    day_name = days_ru.get(datetime.now().strftime('%A'), 'день')
+    hour = datetime.now().hour
+    time_of_day = "утренний" if hour < 12 else "вечерний"
+    header = f"Привет! Сегодня {day_name} твой {time_of_day} AAVE Мониторинг"
+    
+    report = f"<b>{header}</b>\n\n"
+    console_report = f"\n=== {header} ===\n"
     
     low_hf_warning = False
     
@@ -178,7 +191,7 @@ def monitor_aave_positions():
                 emoji = '🟢'
                 base_status = 'нет долга'
             else:
-                hf_display = "{0:.2f}".format(health_factor)
+                hf_display = "{0:.0f}".format(health_factor)
                 if health_factor > 1.45:
                     emoji = '🟢'
                 else:
@@ -189,13 +202,13 @@ def monitor_aave_positions():
             
             console_section = f"\n--- {console_name} ---\n"
             console_section += f"{emoji}Health Factor: {hf_display} ({base_status})\n"
-            console_section += f"Коллатерал: ${total_collateral_base:,.2f} USD\n"
-            console_section += f"Долг: ${total_debt_base:,.2f} USD\n"
+            console_section += f"Коллатерал: ${total_collateral_base:,.0f} USD\n"
+            console_section += f"Долг: ${total_debt_base:,.0f} USD\n"
             
             tg_section = f"<b>{tg_name}</b>\n"
             tg_section += f"{emoji}HF: <code>{hf_display}</code> ({base_status})\n"
-            tg_section += f"Коллатерал: <code>${total_collateral_base:,.2f}</code>\n"
-            tg_section += f"Долг: <code>${total_debt_base:,.2f}</code>\n"
+            tg_section += f"Коллатерал: <code>${total_collateral_base:,.0f}</code>\n"
+            tg_section += f"Долг: <code>${total_debt_base:,.0f}</code>\n"
             
             # Детали токенов: только если есть активность
             active_reserves = []
@@ -233,8 +246,8 @@ def monitor_aave_positions():
                     details_console = "Детали активов:\n"
                     details_tg = "Активы:\n"
                     for sym, bal, debt, a_usd, d_usd in active_reserves[:5]:
-                        details_console += f"  - {sym}: Баланс {bal:.2f} (${a_usd:.2f}), Долг {debt:.2f} (${d_usd:.2f})\n"
-                        details_tg += f"• <code>{sym}</code>: {bal:.2f} (${a_usd:.2f}) | Долг: {debt:.2f} (${d_usd:.2f})\n"
+                        details_console += f"  - {sym}: Баланс {bal:.0f} (${a_usd:.0f}), Долг {debt:.0f} (${d_usd:.0f})\n"
+                        details_tg += f"• <code>{sym}</code>: {bal:.0f} (${a_usd:.0f}) | Долг: {debt:.0f} (${d_usd:.0f})\n"
                 # Если нет активных — просто не добавляем секцию (убрали "Нет активных токенов")
             # Если позиция пустая — тоже не добавляем секцию
             
