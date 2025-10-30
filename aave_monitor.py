@@ -191,7 +191,7 @@ def monitor_aave_positions():
                 emoji = '🟢'
                 base_status = 'нет долга'
             else:
-                hf_display = "{0:.0f}".format(health_factor)
+                hf_display = "{0:.2f}".format(health_factor)
                 if health_factor > 1.45:
                     emoji = '🟢'
                 else:
