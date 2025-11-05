@@ -133,6 +133,15 @@ def get_token_details(w3, reserve_address):
         print(f"Ошибка деталей токена: {e}")
         return 'UNKNOWN', 18
 
+def get_hf_status(health_factor):
+    """Определяет эмодзи и статус для Health Factor"""
+    if health_factor < 1.3:
+        return '🔴', 'Опасно'
+    elif health_factor < 1.45:
+        return '🟡', 'Нейтрально'
+    else:
+        return '🟢', 'Безопасно'
+
 def monitor_aave_positions():
     """Основной мониторинг"""
     print("Запуск мониторинга...")  # Debug для Actions
@@ -146,7 +155,8 @@ def monitor_aave_positions():
     
     eth_price = get_eth_price()
     
-    # Новый заголовок
+    # Новый заголовок с датой
+    now = datetime.now()
     days_ru = {
         'Monday': 'понедельник',
         'Tuesday': 'вторник',
@@ -156,10 +166,18 @@ def monitor_aave_positions():
         'Saturday': 'суббота',
         'Sunday': 'воскресенье'
     }
-    day_name = days_ru.get(datetime.now().strftime('%A'), 'день')
-    hour = datetime.now().hour
-    time_of_day = "утренний" if hour < 12 else "вечерний"
-    header = f"Привет! Сегодня {day_name} твой {time_of_day} AAVE Мониторинг"
+    months_ru = {
+        1: 'января', 2: 'февраля', 3: 'марта', 4: 'апреля',
+        5: 'мая', 6: 'июня', 7: 'июля', 8: 'августа',
+        9: 'сентября', 10: 'октября', 11: 'ноября', 12: 'декабря'
+    }
+    
+    day_name = days_ru.get(now.strftime('%A'), 'день')
+    day_num = now.day
+    month_name = months_ru.get(now.month, '')
+    week_num = now.isocalendar()[1]
+    
+    header = f"#Крипта #AAVE\n{day_name.capitalize()} {day_num} {month_name}, неделя {week_num}"
     
     report = f"<b>{header}</b>\n\n"
     console_report = f"\n=== {header} ===\n"
@@ -180,31 +198,28 @@ def monitor_aave_positions():
             liq_threshold = result[3] / 1e4
             ltv = result[4] / 1e4
             health_factor_raw = result[5]
-            health_factor = health_factor_raw / 1e18  # Здесь рассчитываем, перед использованием!
+            health_factor = health_factor_raw / 1e18
             
-            # HF обработка с эмодзи (после расчёта!)
+            # HF обработка с эмодзи и статусом
             MAX_UINT256 = 2**256 - 1
             if health_factor_raw == MAX_UINT256:
                 hf_display = '∞'
                 emoji = '🟢'
-                base_status = 'нет долга'
+                status = 'Безопасно (нет долга)'
             else:
                 hf_display = "{0:.2f}".format(health_factor)
-                if health_factor > 1.45:
-                    emoji = '🟢'
-                else:
-                    emoji = '🔴'
-                base_status = 'РИСК ЛИКВИДАЦИИ!' if health_factor < 1 else 'Безопасно'
-                if health_factor < 1.4:
+                emoji, status = get_hf_status(health_factor)
+                
+                if health_factor < 1.3:
                     low_hf_warning = True
             
             console_section = f"\n--- {console_name} ---\n"
-            console_section += f"{emoji}Health Factor: {hf_display} ({base_status})\n"
+            console_section += f"{emoji} Health Factor: {hf_display} ({status})\n"
             console_section += f"Коллатерал: ${total_collateral_base:,.0f} USD\n"
             console_section += f"Долг: ${total_debt_base:,.0f} USD\n"
             
             tg_section = f"<b>{tg_name}</b>\n"
-            tg_section += f"{emoji}HF: <code>{hf_display}</code> ({base_status})\n"
+            tg_section += f"{emoji} HF: <code>{hf_display}</code> ({status})\n"
             tg_section += f"Коллатерал: <code>${total_collateral_base:,.0f}</code>\n"
             tg_section += f"Долг: <code>${total_debt_base:,.0f}</code>\n"
             
@@ -235,7 +250,6 @@ def monitor_aave_positions():
                             except Exception:
                                 pass  # Skip bad reserve
                 except Exception as config_e:
-                    # Убрали вывод "Нет деталей" — просто пропускаем без добавления секции
                     pass
                 
                 # Сортировка и вывод топ-5
@@ -246,8 +260,6 @@ def monitor_aave_positions():
                     for sym, bal, debt, a_usd, d_usd in active_reserves[:5]:
                         details_console += f"  - {sym}: Баланс {bal:.0f} (${a_usd:.0f}), Долг {debt:.0f} (${d_usd:.0f})\n"
                         details_tg += f"• <code>{sym}</code>: {bal:.0f} (${a_usd:.0f}) | Долг: {debt:.0f} (${d_usd:.0f})\n"
-                # Если нет активных — просто не добавляем секцию (убрали "Нет активных токенов")
-            # Если позиция пустая — тоже не добавляем секцию
             
             # Добавляем детали только если они есть
             if details_console or details_tg:
@@ -262,14 +274,13 @@ def monitor_aave_positions():
             console_report += f"\n--- {console_name} ---\n{error_msg}\n"
             report += f"<b>{tg_name}</b>: {error_msg}\n\n"
     
-    console_report += "\n" + "="*50 + "\n"
-    report += "=" * 50
+    console_report += "\n"
     
     print(console_report)
     
     # TG отправка
     if low_hf_warning:
-        report = "🚨 <b>ВНИМАНИЕ: Низкий HF у некоторых позиций!</b>\n\n" + report
+        report = "🚨 <b>ВНИМАНИЕ: Опасный HF у некоторых позиций!</b>\n\n" + report
     send_telegram_message(report)
     
     return console_report
